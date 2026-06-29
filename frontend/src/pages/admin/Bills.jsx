@@ -1,15 +1,32 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import API from "../../services/api";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import toast from "react-hot-toast";
+import { Trash2 } from "lucide-react";
+import { AuthContext } from "../../context/AuthContext";
 
 const AdminBills = () => {
+  const { user } = useContext(AuthContext);
+  const isAdmin = user?.role === "admin";
+
   const [bills, setBills] = useState([]);
   const [filter, setFilter] = useState("daily");
 
   const [cashTax, setCashTax] = useState(0);
-  const [cardTax, setCardTax] =useState(0);
+  const [cardTax, setCardTax] = useState(0);
   const [serviceTax, setServiceTax] = useState(0);
+
+  // Confirmation modal state: type = 'single' | 'all'
+  const [confirmModal, setConfirmModal] = useState({
+    open: false,
+    type: null,
+    billId: null,
+  });
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteRange, setDeleteRange] = useState("all");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   // FETCH BILLS
   const fetchBills = async () => {
@@ -126,6 +143,60 @@ const totalSales = filteredBills
       ),
     0
   );
+
+  // Open confirmation modal for single bill delete
+  const openDeleteBill = (billId) => {
+    setConfirmModal({ open: true, type: "single", billId });
+  };
+
+  // Open confirmation modal for delete all
+  const openDeleteAll = () => {
+    setDeletePassword("");
+    setDeleteRange("all");
+    setPasswordError("");
+    setConfirmModal({ open: true, type: "all", billId: null });
+  };
+
+  // Close modal without action
+  const closeModal = () => {
+    setConfirmModal({ open: false, type: null, billId: null });
+    setDeletePassword("");
+    setDeleteRange("all");
+    setPasswordError("");
+  };
+
+  // Execute the confirmed deletion
+  const confirmDelete = async () => {
+    if (confirmModal.type === "all") {
+      if (!deletePassword.trim()) {
+        setPasswordError("Password is required to confirm deletion.");
+        return;
+      }
+    }
+
+    setDeleteLoading(true);
+    try {
+      if (confirmModal.type === "single") {
+        await API.delete(`/bills/${confirmModal.billId}`);
+        toast.success("Bill deleted successfully");
+      } else {
+        const { data } = await API.delete("/bills/all", {
+          data: { password: deletePassword, range: deleteRange },
+        });
+        toast.success(data.message || "Bills deleted successfully");
+      }
+      closeModal();
+      fetchBills();
+    } catch (error) {
+      if (confirmModal.type === "all" && error.response?.status === 401) {
+        setPasswordError(error.response.data.message || "Incorrect password. Delete operation cancelled.");
+      } else {
+        toast.error(error.response?.data?.message || "Failed to delete. Please try again.");
+      }
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   const saveTax = async () => {
   try {
@@ -409,6 +480,17 @@ autoTable(doc, {
       Download PDF
     </button>
 
+    {/* DELETE ALL BILLS — Admin Only */}
+    {isAdmin && (
+      <button
+        onClick={openDeleteAll}
+        className="h-[38px] px-4 bg-red-600 text-white text-xs font-semibold border border-red-600 hover:bg-white hover:text-red-600 transition-all active:scale-[0.98] flex items-center gap-1.5"
+      >
+        <Trash2 size={13} />
+        Delete All
+      </button>
+    )}
+
   </div>
 
 </div>
@@ -671,6 +753,19 @@ autoTable(doc, {
 
               </div>
 
+              {/* DELETE BILL BUTTON — Admin Only */}
+              {isAdmin && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <button
+                    onClick={() => openDeleteBill(bill._id)}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-red-600 border border-red-200 bg-red-50 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all active:scale-[0.98]"
+                  >
+                    <Trash2 size={11} />
+                    Delete Bill
+                  </button>
+                </div>
+              )}
+
             </div>
 
           </div>
@@ -678,6 +773,136 @@ autoTable(doc, {
 
       </div>
 
+    )}
+
+    {/* CONFIRMATION MODAL */}
+    {confirmModal.open && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {/* Backdrop */}
+        <div
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          onClick={closeModal}
+        />
+
+        {/* Dialog */}
+        <div className={`relative bg-white border border-gray-200 shadow-2xl w-full mx-4 ${confirmModal.type === "all" ? "max-w-md" : "max-w-sm"}`}>
+
+          {/* Header */}
+          <div className="bg-red-600 px-5 py-4">
+            <div className="flex items-center gap-2">
+              <Trash2 size={16} className="text-white" />
+              <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
+                {confirmModal.type === "all" ? "Delete Bills" : "Delete Bill"}
+              </h3>
+            </div>
+          </div>
+
+          {/* Body */}
+          {confirmModal.type === "all" ? (
+            <div className="px-5 py-5 space-y-4">
+
+              {/* Warning */}
+              <div className="bg-red-50 border border-red-200 px-3 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-red-700 mb-1">Warning</p>
+                <p className="text-xs text-red-600 leading-relaxed">
+                  This action cannot be undone. Deleted bills cannot be recovered.
+                </p>
+              </div>
+
+              {/* Range Selector */}
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-2">
+                  Select Range
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { value: "today", label: "Today" },
+                    { value: "week", label: "This Week" },
+                    { value: "month", label: "This Month" },
+                    { value: "all", label: "All Bills" },
+                  ].map((opt) => (
+                    <label
+                      key={opt.value}
+                      className="flex items-center gap-2.5 cursor-pointer group"
+                    >
+                      <input
+                        type="radio"
+                        name="deleteRange"
+                        value={opt.value}
+                        checked={deleteRange === opt.value}
+                        onChange={() => setDeleteRange(opt.value)}
+                        className="accent-red-600 w-3.5 h-3.5"
+                      />
+                      <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900 transition-colors">
+                        {opt.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-2">
+                  Admin Password
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter your password to confirm"
+                  value={deletePassword}
+                  onChange={(e) => {
+                    setDeletePassword(e.target.value);
+                    setPasswordError("");
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && confirmDelete()}
+                  className={`w-full h-[38px] px-3 border bg-gray-50 text-sm outline-none transition-all ${
+                    passwordError ? "border-red-500 focus:border-red-600" : "border-gray-300 focus:border-black"
+                  }`}
+                />
+                {passwordError && (
+                  <p className="text-xs text-red-600 mt-1.5 font-medium">{passwordError}</p>
+                )}
+              </div>
+
+            </div>
+          ) : (
+            <div className="px-5 py-5">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                Are you sure you want to delete this bill? This action cannot be undone.
+              </p>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="px-5 pb-5 flex items-center justify-end gap-3">
+            <button
+              onClick={closeModal}
+              disabled={deleteLoading}
+              className="h-[36px] px-5 text-sm font-semibold text-gray-700 border border-gray-300 hover:border-gray-500 transition-all disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={deleteLoading}
+              className="h-[36px] px-5 text-sm font-semibold text-white bg-red-600 border border-red-600 hover:bg-red-700 hover:border-red-700 transition-all active:scale-[0.98] disabled:opacity-60 flex items-center gap-2"
+            >
+              {deleteLoading ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={13} />
+                  {confirmModal.type === "all" ? "Delete" : "Delete"}
+                </>
+              )}
+            </button>
+          </div>
+
+        </div>
+      </div>
     )}
 
   </div>
