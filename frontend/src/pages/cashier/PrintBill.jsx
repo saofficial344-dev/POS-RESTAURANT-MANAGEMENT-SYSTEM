@@ -25,7 +25,7 @@ const PrintBill = () => {
 
   // 🔥 AFTER PRINT CLEAR MENU STATE
   if (location.state?.clearCart) {
-    navigate("/cashier/menu", {
+    navigate("/pos/menu", {
       replace: true,
       state: {},
     });

@@ -1,79 +1,62 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
-import PrintBill from "./pages/cashier/PrintBill";
+import { POSProvider }  from "./context/POSContext";
 
-import Login from "./pages/Login";
-import Register from "./pages/Register";
+import RoleSelector  from "./pages/RoleSelector";
+import RoleLogin     from "./pages/RoleLogin";
+import NotFound      from "./pages/NotFound";
 
-import CashierMenu from "./pages/cashier/Menu";
-import CashierBills from "./pages/cashier/Bills";
-
-import AdminMenu from "./pages/admin/Menu";
-import AdminBills from "./pages/admin/Bills";
-import CategoryItems from "./pages/admin/CategoryItems";
-
-import ProtectedLayout from "./routes/ProtectedLayout";
-import NotFound from "./pages/NotFound";
+import AdminRoutes    from "./routes/AdminRoutes";
+import POSRoutes      from "./routes/POSRoutes";
+import KitchenRoutes  from "./routes/KitchenRoutes";
+import WaiterRoutes   from "./routes/WaiterRoutes";
+import DeliveryRoutes from "./routes/DeliveryRoutes";
+import ManagerRoutes  from "./routes/ManagerRoutes";
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-
         <Routes>
 
-          {/* PUBLIC ROUTES */}
-          <Route path="/" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          {/* ── Workspace selector (new root) ── */}
+          <Route path="/" element={<RoleSelector />} />
 
-          {/* ADMIN ROUTES */}
-          <Route element={<ProtectedLayout role="admin" />}>
+          {/* ── Unified role-specific login ── */}
+          <Route path="/login/:role" element={<RoleLogin />} />
 
-            <Route
-              path="/admin/menu"
-              element={<AdminMenu />}
-            />
+          {/* ── Admin ── */}
+          <Route path="/admin/*" element={<AdminRoutes />} />
 
-            <Route
-              path="/admin/menu/:categoryId"
-              element={<CategoryItems />}
-            />
-
-            <Route
-              path="/admin/bills"
-              element={<AdminBills />}
-            />
-
-          </Route>
-
-          {/* CASHIER ROUTES */}
-          <Route element={<ProtectedLayout role="cashier" />}>
-
-            <Route
-              path="/cashier/menu"
-              element={<CashierMenu />}
-            />
-
-            <Route
-              path="/cashier/bills"
-              element={<CashierBills />}
-            />
-          </Route>
-
-          {/* PRINT BILL */}
+          {/* ── Cashier / POS — POSProvider scoped to this tree ── */}
           <Route
-            path="/cashier/print/:id"
-            element={<PrintBill />}
+            path="/pos/*"
+            element={
+              <POSProvider>
+                <POSRoutes />
+              </POSProvider>
+            }
           />
 
-          {/* 404 */}
+          {/* ── Kitchen — fullscreen standalone display ── */}
+          <Route path="/kitchen/*" element={<KitchenRoutes />} />
+
+          {/* ── Waiter ── */}
+          <Route path="/waiter/*" element={<WaiterRoutes />} />
+
+          {/* ── Delivery ── */}
+          <Route path="/delivery/*" element={<DeliveryRoutes />} />
+
+          {/* ── Manager ── */}
+          <Route path="/manager/*" element={<ManagerRoutes />} />
+
+          {/* ── Register removed from public — redirect anyone who lands here ── */}
+          <Route path="/register" element={<Navigate to="/" replace />} />
+
+          {/* ── 404 ── */}
           <Route path="*" element={<NotFound />} />
 
         </Routes>
-      
-          
-        
-
       </BrowserRouter>
     </AuthProvider>
   );

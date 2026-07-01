@@ -1,0 +1,262 @@
+.kitchen-display {
+  background: #1a1a2e;
+  min-height: 100vh;
+  padding: 20px;
+  color: white;
+}
+
+.kitchen-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  background: #16213e;
+  padding: 20px;
+  border-radius: 10px;
+  border-bottom: 3px solid #e94560;
+}
+
+.kitchen-title h1 {
+  margin: 0;
+  font-size: 32px;
+}
+
+.kitchen-title p {
+  margin: 5px 0 0 0;
+  color: #aaa;
+}
+
+.kitchen-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.refresh-btn,
+.logout-btn {
+  padding: 10px 20px;
+  background: #e94560;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.3s;
+}
+
+.refresh-btn:hover {
+  background: #d63447;
+}
+
+.logout-btn {
+  background: #666;
+}
+
+.logout-btn:hover {
+  background: #555;
+}
+
+.kitchen-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.order-column {
+  background: #16213e;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 200px);
+}
+
+.column-header {
+  padding: 15px;
+  border-bottom: 2px solid #333;
+  background: #0f3460;
+}
+
+.column-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.pending-column .column-header {
+  border-bottom-color: #e94560;
+}
+
+.cooking-column .column-header {
+  border-bottom-color: #f39c12;
+}
+
+.ready-column .column-header {
+  border-bottom-color: #27ae60;
+}
+
+.orders-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.empty-state {
+  text-align: center;
+  color: #666;
+  margin-top: 50px;
+  font-size: 18px;
+}
+
+.order-card {
+  background: #1a1a2e;
+  border: 2px solid #333;
+  border-radius: 8px;
+  padding: 15px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.order-card.cooking {
+  border-color: #f39c12;
+  background: rgba(243, 156, 18, 0.1);
+}
+
+.order-card.ready {
+  border-color: #27ae60;
+  background: rgba(39, 174, 96, 0.1);
+}
+
+.order-card:hover {
+  transform: scale(1.02);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #333;
+}
+
+.order-number {
+  font-size: 18px;
+  font-weight: bold;
+  color: #fff;
+}
+
+.order-type {
+  background: #e94560;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.order-items {
+  margin: 10px 0;
+}
+
+.item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.item-name {
+  color: #fff;
+  font-weight: 500;
+}
+
+.item-qty {
+  color: #aaa;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0 8px;
+  border-radius: 3px;
+}
+
+.order-notes {
+  background: rgba(230, 126, 34, 0.2);
+  border-left: 3px solid #e67e22;
+  padding: 10px;
+  margin: 10px 0;
+  font-size: 12px;
+  border-radius: 4px;
+  color: #e67e22;
+}
+
+.status-btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.3s;
+  margin-top: 10px;
+}
+
+.cooking-btn {
+  background: #f39c12;
+  color: white;
+}
+
+.cooking-btn:hover {
+  background: #d68910;
+}
+
+.ready-btn {
+  background: #27ae60;
+  color: white;
+}
+
+.ready-btn:hover {
+  background: #229954;
+}
+
+.ready-badge {
+  background: #27ae60;
+  color: white;
+  padding: 10px;
+  border-radius: 5px;
+  text-align: center;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+/* Scrollbar styling */
+.orders-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.orders-list::-webkit-scrollbar-track {
+  background: #0f3460;
+}
+
+.orders-list::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 4px;
+}
+
+.orders-list::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+@media (max-width: 1200px) {
+  .kitchen-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .order-column {
+    height: auto;
+    max-height: 500px;
+  }
+}

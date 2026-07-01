@@ -12,7 +12,7 @@ const Bills = () => {
     await API.put(`/bills/void/${bill._id}`);
 
     // 2. SEND DATA TO MENU FOR EDIT
-    navigate("/cashier/menu", {
+    navigate("/pos/menu", {
       state: { editBill: bill },
     });
 
@@ -191,12 +191,12 @@ const Bills = () => {
   .map((bill, index) => (
             <div
               key={bill._id}
-              className="bg-white border border-gray-200 shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 "
+              className="bg-white border border-gray-200 shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
             >
 
               {/* CARD HEADER */}
              {/* HEADER */}
-<div className="border-b border-gray-200 px-3 py-2 bg-gradient-to-r from-[#fafafa] to-white">
+<div className="border-b border-gray-200 px-3 py-2 bg-gradient-to-r from-[#fafafa] to-white shrink-0">
 
   <div className="flex items-start justify-between">
 
@@ -231,10 +231,10 @@ const Bills = () => {
 </div>
 
 {/* BODY */}
-<div className="p-3">
+<div className="p-3 flex flex-col flex-1">
 
   {/* ITEMS */}
-  <div className="space-y- max-h-[150px] overflow-y-auto pr-1">
+  <div className="space-y- max-h-[150px] overflow-y-auto pr-1 shrink-0">
 
     {bill.items.map((item, index) => (
 
@@ -271,8 +271,8 @@ const Bills = () => {
 
   </div>
 
-  {/* TOTAL */}
-  <div className="mt-3 pt-3 border-t border-gray-200">
+  {/* TOTAL — mt-auto pins this section to the bottom of the card */}
+  <div className="mt-auto pt-3 border-t border-gray-200">
 
   <div className="flex items-center justify-between mb-">
 

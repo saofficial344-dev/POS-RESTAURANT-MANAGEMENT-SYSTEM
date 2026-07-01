@@ -1,20 +1,13 @@
 import { useContext } from "react";
-import {
-  Navigate,
-  Outlet,
-} from "react-router-dom";
-
+import { Navigate, Outlet } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
-
+import { getDashboardPath } from "../utils/roleConfig";
 import Sidebar from "../components/Sidebar";
-import Navbar from "../components/Navbar";
-// import Footer from "../components/Footer";
+import Navbar  from "../components/Navbar";
 
 const ProtectedLayout = ({ role }) => {
-  const { user, loading } =
-    useContext(AuthContext);
+  const { user, loading } = useContext(AuthContext);
 
-  // LOADING
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-black text-white">
@@ -23,46 +16,26 @@ const ProtectedLayout = ({ role }) => {
     );
   }
 
-  // NOT LOGGED IN
+  // Not authenticated → workspace selector
   if (!user) {
     return <Navigate to="/" replace />;
   }
 
-  // ROLE CHECK
+  // Wrong role → redirect to that user's own dashboard
   if (role && user.role !== role) {
-    return (
-      <Navigate
-        to={
-          user.role === "admin"
-            ? "/admin/menu"
-            : "/cashier/menu"
-        }
-        replace
-      />
-    );
+    return <Navigate to={getDashboardPath(user.role)} replace />;
   }
 
-  // MAIN LAYOUT
   return (
-    <div className="min-h-screen flex">
+    <div className="h-screen flex overflow-hidden">
 
-      {/* SIDEBAR */}
       <Sidebar />
 
-      {/* RIGHT SIDE */}
-      <div className="flex-1 flex flex-col min-h-screen">
-
-        {/* NAVBAR */}
+      <div className="flex-1 flex flex-col overflow-hidden">
         <Navbar />
-
-        {/* PAGE */}
-        <main className="flex-1 bg-gray-50">
+        <main className="flex-1 bg-gray-50 overflow-y-auto">
           <Outlet />
         </main>
-
-        {/* FOOTER */}
-        {/* <Footer /> */}
-
       </div>
 
     </div>

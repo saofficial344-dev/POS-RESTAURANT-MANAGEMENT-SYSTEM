@@ -1,56 +1,40 @@
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 
 const Navbar = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const location  = useLocation();
+  const { user }  = useContext(AuthContext);
 
-  const { logout } = useContext(AuthContext);
-
-  // hide on auth pages
-  if (
-    location.pathname === "/" ||
-    location.pathname === "/register"
-  ) {
+  // Hide on auth pages (workspace selector and role-specific login screens)
+  if (location.pathname === "/" || location.pathname.startsWith("/login/")) {
     return null;
   }
 
-  const logoutHandler = () => {
-
-  // localStorage clear
-  localStorage.clear();
-
-  // sessionStorage clear
-  sessionStorage.clear();
-
-  // clear cookies
-  document.cookie.split(";").forEach((cookie) => {
-    document.cookie = cookie
-      .replace(/^ +/, "")
-      .replace(
-        /=.*/,
-        "=;expires=" + new Date(0).toUTCString() + ";path=/"
-      );
-  });
-
-  logout();
-
-  navigate("/", { replace: true });
-
-  // hard refresh
-  window.location.reload();
-};
+  // Build a readable breadcrumb from the current path
+  const crumb = location.pathname
+    .split("/")
+    .filter(Boolean)
+    .join(" / ");
 
   return (
-    <div className="h-16 border-b flex justify-end items-center px-6 bg-white">
+    <div className="h-16 border-b border-gray-100 bg-white flex items-center justify-between px-6 shrink-0">
 
-      <button
-        onClick={logoutHandler}
-        className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"
-      >
-        Logout
-      </button>
+      {/* Breadcrumb */}
+      <p className="text-sm text-gray-400 capitalize tracking-wide">{crumb}</p>
+
+      {/* User identity — logout lives in the Sidebar, not here */}
+      {user && (
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-semibold text-gray-800 leading-tight">{user.name}</p>
+            <p className="text-xs text-gray-400 capitalize">{user.role}</p>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center text-sm font-bold shrink-0">
+            {user.name?.charAt(0).toUpperCase()}
+          </div>
+        </div>
+      )}
 
     </div>
   );

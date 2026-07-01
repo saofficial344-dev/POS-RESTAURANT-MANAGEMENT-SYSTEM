@@ -3,12 +3,15 @@ import Category from "../models/Category.js";
 
 // ➕ CREATE
 export const createItem = async (req, res) => {
-  const { name, price, category } = req.body;
+  const { name, price, category, image, available, description } = req.body;
 
   const item = await Item.create({
     name,
     price,
     category,
+    image: image || '',
+    available: available !== undefined ? available : true,
+    description: description || '',
   });
 
   res.json(item);
@@ -35,13 +38,14 @@ export const deleteItem = async (req, res) => {
 
 // ✏️ UPDATE
 export const updateItem = async (req, res) => {
-  const { name, price } = req.body;
+  const { name, price, image, available, description } = req.body;
+  const updates = {};
+  if (name !== undefined)        updates.name = name;
+  if (price !== undefined)       updates.price = price;
+  if (image !== undefined)       updates.image = image;
+  if (available !== undefined)   updates.available = available;
+  if (description !== undefined) updates.description = description;
 
-  const item = await Item.findByIdAndUpdate(
-    req.params.id,
-    { name, price },
-    { returnDocument: "after" }
-  );
-
+  const item = await Item.findByIdAndUpdate(req.params.id, updates, { new: true });
   res.json(item);
 };
