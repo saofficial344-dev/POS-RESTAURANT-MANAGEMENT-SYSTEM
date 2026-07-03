@@ -1,20 +1,22 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import API from "../../services/api";
+import { useBills } from "../../hooks/useBills";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { autoTable } from "jspdf-autotable";
 import toast from "react-hot-toast";
-import { Trash2 } from "lucide-react";
+import { Trash2, RefreshCw, AlertCircle } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 
 const AdminBills = () => {
   const { user } = useContext(AuthContext);
   const isAdmin = user?.role === "admin";
 
-  const [bills, setBills] = useState([]);
-  const [filter, setFilter] = useState("daily");
+  const { bills, loading, error, refetch: fetchBills } = useBills({ refreshInterval: 5_000 });
 
-  const [cashTax, setCashTax] = useState(0);
-  const [cardTax, setCardTax] = useState(0);
+  const [filter, setFilter]   = useState("daily");
+
+  const [cashTax, setCashTax]       = useState(0);
+  const [cardTax, setCardTax]       = useState(0);
   const [serviceTax, setServiceTax] = useState(0);
 
   // Confirmation modal state: type = 'single' | 'all'
@@ -28,16 +30,6 @@ const AdminBills = () => {
   const [deletePassword, setDeletePassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
-  // FETCH BILLS
-  const fetchBills = async () => {
-    try {
-      const { data } = await API.get("/bills");
-      setBills(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
   const fetchTax = async () => {
   try {
 
@@ -49,18 +41,13 @@ const AdminBills = () => {
     setServiceTax(data.serviceTax || 0);
 
   } catch (error) {
-    console.log(error);
+    console.error(error);
   }
 };
 
   useEffect(() => {
-    fetchBills()
     fetchTax();
-
-    const interval = setInterval(fetchBills, 5000);
-
-    return () => clearInterval(interval);
-  }, []); 
+  }, []);
 
   // DATE FORMAT
   const formatDate = (date) => {
@@ -132,11 +119,11 @@ const totalSales = filteredBills
   // TOTAL ORDERS
   const totalOrders = filteredBills.length;
 
-  // TOTAL ITEMS
+  // TOTAL ITEMS — null-guard on bill.items prevents TypeError crashes
   const totalItems = filteredBills.reduce(
     (acc, bill) =>
       acc +
-      bill.items.reduce(
+      (bill.items || []).reduce(
         (sum, item) =>
           sum + Number(item.quantity || 0),
         0
@@ -210,17 +197,18 @@ const totalSales = filteredBills
     alert("Tax Updated");
 
   } catch (error) {
-    console.log(error);
+    console.error(error);
   }
 };
 
   // DOWNLOAD PDF
   const downloadPDF = () => {
     if (filteredBills.length === 0) {
-      alert("No bills available");
+      toast.error("No bills available to export");
       return;
     }
 
+    try {
     const doc = new jsPDF();
 
     doc.setFontSize(18);
@@ -247,9 +235,9 @@ filteredBills.forEach((bill) => {
   }
 
   tableData.push([
-    bill.tableNo,
-    bill.items.length,
-    `Rs ${bill.totalAmount}`,
+    bill.tableNo ?? "—",
+    (bill.items || []).length,
+    `Rs ${bill.totalAmount ?? 0}`,
     billStatus,
     formatDate(bill.createdAt).date,
     formatDate(bill.createdAt).time,
@@ -345,6 +333,10 @@ autoTable(doc, {
     );
 
     doc.save(`${filter}-sales-report.pdf`);
+    } catch (pdfErr) {
+      console.error("PDF generation failed:", pdfErr);
+      toast.error("Failed to generate PDF. Please try again.");
+    }
   };
 
   return (
@@ -586,8 +578,31 @@ autoTable(doc, {
 
     </div>
 
+    {/* LOADING */}
+    {loading && (
+      <div className="bg-white border border-gray-200 shadow-sm p-10 text-center">
+        <RefreshCw size={28} className="animate-spin text-gray-400 mx-auto mb-3" />
+        <p className="text-sm text-gray-500 font-medium">Loading bills…</p>
+      </div>
+    )}
+
+    {/* ERROR */}
+    {!loading && error && (
+      <div className="bg-white border border-red-200 shadow-sm p-10 text-center">
+        <AlertCircle size={28} className="text-red-400 mx-auto mb-3" />
+        <h2 className="text-lg font-bold text-gray-800 mb-1">Failed to Load Bills</h2>
+        <p className="text-sm text-red-500 mb-4">{error}</p>
+        <button
+          onClick={fetchBills}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white text-sm font-semibold hover:bg-gray-800 transition-colors"
+        >
+          <RefreshCw size={13} /> Retry
+        </button>
+      </div>
+    )}
+
     {/* EMPTY */}
-    {filteredBills.length === 0 ? (
+    {!loading && !error && filteredBills.length === 0 ? (
 
       <div className="bg-white border border-gray-200 shadow-sm p-10 text-center">
 
@@ -602,7 +617,7 @@ autoTable(doc, {
 
       </div>
 
-    ) : (
+    ) : !loading && !error && (
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
 

@@ -3,8 +3,9 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import {
   RefreshCw, XCircle, Clock, ChefHat, CheckCircle,
-  ShoppingBag, Eye,
+  ShoppingBag, Eye, ChevronDown, ChevronUp,
 } from "lucide-react";
+import OrderTimeline from "../../components/OrderTimeline";
 
 const STATUS_CFG = {
   Pending:   { label: "Pending",   badge: "bg-amber-100 text-amber-700",   dot: "bg-amber-400"   },
@@ -47,9 +48,11 @@ const StatCard = ({ label, value, icon: Icon, iconBg }) => (
 );
 
 const Orders = () => {
-  const [orders, setOrders]       = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [activeTab, setActiveTab] = useState("All");
+  const [orders, setOrders]           = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [activeTab, setActiveTab]     = useState("All");
+  const [expandedTimelines, setExpandedTimelines] = useState({});
+  const toggleTimeline = (id) => setExpandedTimelines((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -255,6 +258,26 @@ const Orders = () => {
                           : ""}
                         {order.completedBy && ` · by ${order.completedBy?.name || "Manager"}`}
                       </p>
+                    )}
+
+                    {/* Timeline toggle */}
+                    {order.timeline?.length > 0 && (
+                      <div className="mt-2 border-t border-gray-100 pt-2">
+                        <button
+                          onClick={() => toggleTimeline(order._id)}
+                          className="flex items-center gap-1 text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition-colors w-full"
+                        >
+                          {expandedTimelines[order._id]
+                            ? <><ChevronUp size={10} /> Hide Timeline</>
+                            : <><ChevronDown size={10} /> Show Timeline ({order.timeline.length} steps)</>
+                          }
+                        </button>
+                        {expandedTimelines[order._id] && (
+                          <div className="mt-2">
+                            <OrderTimeline timeline={order.timeline} />
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

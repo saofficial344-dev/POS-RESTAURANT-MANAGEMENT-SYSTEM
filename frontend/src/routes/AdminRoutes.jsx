@@ -8,12 +8,20 @@ import AdminBills         from '../pages/admin/Bills';
 import UserManagement     from '../pages/admin/UserManagement';
 import Tables             from '../pages/admin/Tables';
 import Orders             from '../pages/admin/Orders';
+import BranchManagement   from '../pages/admin/BranchManagement';
+import SubscriptionPage   from '../pages/admin/SubscriptionPage';
+import BillingHistory     from '../pages/admin/BillingHistory';
+import ManualPayment      from '../pages/admin/ManualPayment';
+import ChangePassword     from '../pages/admin/ChangePassword';
 
 const AdminRoutes = () => (
   <Routes>
 
     {/* Old /admin/login URL → redirect to unified login */}
     <Route path="login" element={<Navigate to="/login/admin" replace />} />
+
+    {/* Force password change — outside ProtectedLayout so the mustChangePassword gate allows access */}
+    <Route path="change-password" element={<ChangePassword />} />
 
     {/* Protected: requires JWT + admin role */}
     <Route element={<ProtectedLayout role="admin" />}>
@@ -25,6 +33,10 @@ const AdminRoutes = () => (
       <Route path="bills"            element={<AdminBills />} />
       <Route path="users"            element={<UserManagement />} />
       <Route path="tables"           element={<Tables />} />
+      <Route path="branches"          element={<BranchManagement />} />
+      <Route path="subscription"      element={<SubscriptionPage />} />
+      <Route path="billing"           element={<BillingHistory />} />
+      <Route path="payments"          element={<ManualPayment />} />
     </Route>
 
     {/* Fallback */}

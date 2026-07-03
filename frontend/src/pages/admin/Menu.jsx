@@ -22,7 +22,7 @@ const Menu = () => {
       const { data } = await API.get("/categories");
       setCategories(data);
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   };
 
@@ -51,7 +51,7 @@ const Menu = () => {
       fetchCategories();
 
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   };
 
@@ -73,7 +73,7 @@ const Menu = () => {
       await API.delete(`/categories/${id}`);
       fetchCategories();
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   };
 

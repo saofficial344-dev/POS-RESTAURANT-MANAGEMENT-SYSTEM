@@ -1,11 +1,15 @@
 import mongoose from 'mongoose';
 
 const PermissionSchema = new mongoose.Schema({
+  restaurantId: {
+    type:    mongoose.Schema.Types.ObjectId,
+    ref:     'Restaurant',
+    default: null,
+  },
   roleName: {
-    type: String,
-    enum: ['SuperAdmin', 'Admin', 'Manager', 'Cashier', 'Waiter', 'Kitchen'],
+    type:     String,
+    enum:     ['SuperAdmin', 'Admin', 'Manager', 'Cashier', 'Waiter', 'Kitchen'],
     required: [true, 'Please provide role name'],
-    unique: true,
   },
   permissions: {
     employees: {
@@ -92,6 +96,9 @@ const PermissionSchema = new mongoose.Schema({
 PermissionSchema.pre('save', function() {
   this.updatedAt = Date.now();
 });
+
+// roleName unique per restaurant (null = platform default that all restaurants inherit)
+PermissionSchema.index({ restaurantId: 1, roleName: 1 }, { unique: true, sparse: true });
 
 const Permission = mongoose.model('Permission', PermissionSchema);
 

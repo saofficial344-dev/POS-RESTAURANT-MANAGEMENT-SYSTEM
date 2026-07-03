@@ -1,6 +1,7 @@
 import express from 'express';
 import protect from '../middleware/authMiddleware.js';
 import { allowRoles, adminOnly } from '../middleware/roleMiddleware.js';
+import { requireWithinLimit } from '../middleware/subscriptionMiddleware.js';
 import {
   getAllTables,
   getAvailableTables,
@@ -22,7 +23,7 @@ router.use(protect);
 router.get('/occupancy', allowRoles('admin', 'manager'), getOccupancyStatus);
 router.get('/available', allowRoles('admin', 'manager', 'waiter', 'cashier'), getAvailableTables);
 router.get('/', allowRoles('admin', 'manager', 'waiter', 'cashier'), getAllTables);
-router.post('/', allowRoles('admin', 'manager'), createTable);
+router.post('/', allowRoles('admin', 'manager'), requireWithinLimit('tables'), createTable);
 
 router.get('/:id', getTable);
 router.patch('/:id', allowRoles('admin', 'manager'), updateTable);

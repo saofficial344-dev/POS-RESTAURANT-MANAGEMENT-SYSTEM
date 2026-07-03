@@ -1,10 +1,9 @@
-import User, { VALID_ROLES } from "../models/User.js";
+import User, { VALID_ROLES } from '../models/User.js';
 
 // GET /api/users
 export const getUsers = async (req, res) => {
   try {
-    const users = await User.find()
-      .select("-password")
+    const users = await User.find({ restaurantId: req.restaurantId || null })
       .sort({ createdAt: -1 });
     res.json(users);
   } catch (error) {
@@ -20,55 +19,71 @@ export const createUser = async (req, res) => {
     if (!name || !password || !role) {
       return res
         .status(400)
-        .json({ message: "Name, password and role are required" });
+        .json({ message: 'Name, password and role are required' });
     }
 
     if (!VALID_ROLES.includes(role)) {
-      return res.status(400).json({ message: "Invalid role" });
+      return res.status(400).json({ message: 'Invalid role' });
     }
 
+    const restaurantId = req.restaurantId || null;
+
     // Creating another Admin requires the requesting admin to re-verify identity
-    if (role === "admin") {
+    if (role === 'admin') {
       if (!adminPassword) {
         return res.status(400).json({
-          message: "Creating an Admin account requires your current password for verification",
+          message:
+            'Creating an Admin account requires your current password for verification',
         });
       }
-      const requestingAdmin = await User.findById(req.user._id);
+      const requestingAdmin = await User.findById(req.user._id).select('+password');
       if (!requestingAdmin) {
-        return res.status(401).json({ message: "Requesting admin not found" });
+        return res.status(401).json({ message: 'Requesting admin not found' });
       }
       const isValid = await requestingAdmin.matchPassword(adminPassword);
       if (!isValid) {
         return res.status(401).json({
-          message: "Admin password verification failed — incorrect password",
+          message: 'Admin password verification failed — incorrect password',
         });
       }
     }
 
-    // Username uniqueness
-    const nameExists = await User.findOne({ name });
+    // Username uniqueness within this restaurant
+    const nameExists = await User.findOne({ name, restaurantId });
     if (nameExists) {
-      return res.status(400).json({ message: "Username already taken" });
+      return res.status(400).json({ message: 'Username already taken' });
     }
 
-    // Email uniqueness (only when provided)
+    // Email uniqueness within this restaurant (only when provided)
     if (email) {
-      const emailExists = await User.findOne({ email });
+      const emailExists = await User.findOne({
+        email,
+        restaurantId,
+        _id: { $ne: null },
+      });
       if (emailExists) {
-        return res.status(400).json({ message: "Email address already in use" });
+        return res
+          .status(400)
+          .json({ message: 'Email address already in use' });
       }
     }
 
-    const user = await User.create({ name, password, role, email, branch });
+    const user = await User.create({
+      restaurantId,
+      name,
+      password,
+      role,
+      email,
+      branch,
+    });
 
     res.status(201).json({
-      _id: user._id,
-      name: user.name,
-      role: user.role,
-      email: user.email,
-      branch: user.branch,
-      status: user.status,
+      _id:       user._id,
+      name:      user.name,
+      role:      user.role,
+      email:     user.email,
+      branch:    user.branch,
+      status:    user.status,
       createdAt: user.createdAt,
     });
   } catch (error) {
@@ -80,9 +95,10 @@ export const createUser = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { name, email, branch, role, password } = req.body;
-    const user = await User.findById(req.params.id);
+    const restaurantId = req.restaurantId || null;
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const user = await User.findOne({ _id: req.params.id, restaurantId });
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
     // Prevent admin from downgrading their own role
     if (
@@ -90,40 +106,43 @@ export const updateUser = async (req, res) => {
       role &&
       role !== user.role
     ) {
-      return res.status(400).json({ message: "Cannot change your own role" });
+      return res.status(400).json({ message: 'Cannot change your own role' });
     }
 
     if (name && name !== user.name) {
-      const taken = await User.findOne({ name });
-      if (taken) return res.status(400).json({ message: "Username already taken" });
+      const taken = await User.findOne({ name, restaurantId });
+      if (taken)
+        return res.status(400).json({ message: 'Username already taken' });
       user.name = name;
     }
 
-    // Email uniqueness — skip if unchanged
     if (email !== undefined && email !== user.email) {
       if (email) {
-        const emailTaken = await User.findOne({ email, _id: { $ne: req.params.id } });
+        const emailTaken = await User.findOne({
+          email,
+          restaurantId,
+          _id: { $ne: req.params.id },
+        });
         if (emailTaken) {
-          return res.status(400).json({ message: "Email address already in use" });
+          return res
+            .status(400)
+            .json({ message: 'Email address already in use' });
         }
       }
       user.email = email;
     }
+
     if (branch !== undefined) user.branch = branch;
     if (role && VALID_ROLES.includes(role)) user.role = role;
-
-    // Set plaintext — the pre-save hook will hash it on save
-    if (password) {
-      user.password = password;
-    }
+    if (password) user.password = password;
 
     const updated = await user.save({ validateModifiedOnly: true });
 
     res.json({
-      _id: updated._id,
-      name: updated.name,
-      role: updated.role,
-      email: updated.email,
+      _id:    updated._id,
+      name:   updated.name,
+      role:   updated.role,
+      email:  updated.email,
       branch: updated.branch,
       status: updated.status,
     });
@@ -135,17 +154,18 @@ export const updateUser = async (req, res) => {
 // DELETE /api/users/:id
 export const deleteUser = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const restaurantId = req.restaurantId || null;
+    const user = await User.findOne({ _id: req.params.id, restaurantId });
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
     if (req.user._id.toString() === req.params.id) {
       return res
         .status(400)
-        .json({ message: "Cannot delete your own account" });
+        .json({ message: 'Cannot delete your own account' });
     }
 
     await user.deleteOne();
-    res.json({ message: "User deleted successfully" });
+    res.json({ message: 'User deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -154,16 +174,17 @@ export const deleteUser = async (req, res) => {
 // PATCH /api/users/:id/status — toggle active / inactive
 export const toggleStatus = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const restaurantId = req.restaurantId || null;
+    const user = await User.findOne({ _id: req.params.id, restaurantId });
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
     if (req.user._id.toString() === req.params.id) {
       return res
         .status(400)
-        .json({ message: "Cannot deactivate your own account" });
+        .json({ message: 'Cannot deactivate your own account' });
     }
 
-    user.status = user.status === "active" ? "inactive" : "active";
+    user.status = user.status === 'active' ? 'inactive' : 'active';
     await user.save({ validateModifiedOnly: true });
 
     res.json({ _id: user._id, status: user.status });

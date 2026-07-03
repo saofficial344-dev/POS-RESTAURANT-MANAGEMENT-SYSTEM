@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useSocketEvent, useSocket } from '../../hooks/useSocket';
 import API from '../../services/api';
+import { Building2, ChevronDown } from 'lucide-react';
 import {
   TrendingUp, ShoppingBag, DollarSign,
-  RefreshCw, Clock, LayoutGrid,
+  RefreshCw, Clock, LayoutGrid, Wifi, WifiOff,
 } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -41,6 +43,49 @@ const RevenueBar = ({ data }) => {
   );
 };
 
+// ── Branch Selector ───────────────────────────────────────────────────────────
+const BranchSelector = ({ branches, selectedId, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const selected = branches.find((b) => String(b._id) === selectedId);
+
+  if (!branches.length) return null;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
+      >
+        <Building2 size={13} className="text-indigo-500" />
+        {selected ? selected.name : 'All Branches'}
+        <ChevronDown size={11} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl border border-gray-100 shadow-xl z-20 overflow-hidden">
+            <button
+              onClick={() => { onChange(null); setOpen(false); }}
+              className={`w-full text-left px-4 py-3 text-sm transition-colors hover:bg-gray-50 ${!selectedId ? 'font-semibold text-indigo-600 bg-indigo-50/50' : 'text-gray-700'}`}
+            >
+              All Branches
+            </button>
+            {branches.map((br) => (
+              <button
+                key={br._id}
+                onClick={() => { onChange(String(br._id)); setOpen(false); }}
+                className={`w-full text-left px-4 py-3 text-sm border-t border-gray-50 transition-colors hover:bg-gray-50 ${String(br._id) === selectedId ? 'font-semibold text-indigo-600 bg-indigo-50/50' : 'text-gray-700'}`}
+              >
+                {br.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 const ManagerDashboard = () => {
   const { user } = useAuth();
@@ -48,28 +93,61 @@ const ManagerDashboard = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState(null);
+  const [branches, setBranches] = useState([]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (branchId = selectedBranch) => {
     try {
       setLoading(true);
+      const url = branchId ? `/dashboard/stats?branchId=${branchId}` : '/dashboard/stats';
       const [statsRes, usersRes] = await Promise.all([
-        API.get('/dashboard/stats'),
+        API.get(url),
         API.get('/users'),
       ]);
-      if (statsRes.data.success) setStats(statsRes.data.data);
+      if (statsRes.data.success) {
+        setStats(statsRes.data.data);
+        if (statsRes.data.data.branches?.length) {
+          setBranches(statsRes.data.data.branches);
+        }
+      }
       setStaffList(usersRes.data || []);
     } catch (err) {
       console.error('Manager dashboard error:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedBranch]);
+
+  const { connected } = useSocket();
 
   useEffect(() => {
-    fetchData();
-    const id = setInterval(fetchData, 60_000);
+    fetchData(selectedBranch);
+    const id = setInterval(() => fetchData(selectedBranch), 5 * 60_000);
     return () => clearInterval(id);
-  }, [fetchData]);
+  }, [selectedBranch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real-time: order changes → bump active order count immediately
+  useSocketEvent('order:status:changed', ({ status }) => {
+    setStats((prev) => {
+      if (!prev) return prev;
+      const orders = { ...(prev.orders || {}) };
+      if (status === 'Completed' || status === 'Cancelled') {
+        orders.active = Math.max(0, (orders.active || 0) - 1);
+        if (status === 'Completed') orders.completed = (orders.completed || 0) + 1;
+      }
+      return { ...prev, orders };
+    });
+  });
+
+  useSocketEvent('order:created', () => {
+    setStats((prev) => {
+      if (!prev) return prev;
+      const orders = { ...(prev.orders || {}) };
+      orders.active = (orders.active || 0) + 1;
+      orders.today  = (orders.today  || 0) + 1;
+      return { ...prev, orders };
+    });
+  });
 
   const s = stats || {};
   const revenue = s.revenue || {};
@@ -91,14 +169,27 @@ const ManagerDashboard = () => {
           <h1 className="text-2xl font-bold text-gray-900">Manager Overview</h1>
           <p className="text-sm text-gray-400 mt-0.5">Welcome, {user?.name}</p>
         </div>
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-black text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+            {connected
+              ? <Wifi size={12} className="text-emerald-500" />
+              : <WifiOff size={12} className="text-red-400" />}
+            {connected ? 'Live' : 'Reconnecting…'}
+          </span>
+          <BranchSelector
+            branches={branches}
+            selectedId={selectedBranch}
+            onChange={(id) => setSelectedBranch(id)}
+          />
+          <button
+            onClick={() => fetchData(selectedBranch)}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-black text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Revenue stats */}
@@ -287,7 +378,7 @@ const ManagerDashboard = () => {
             { label: 'View Bills',    path: '/admin/bills',    emoji: '🧾' },
             { label: 'Menu Items',    path: '/admin/menu',     emoji: '🍽️' },
             { label: 'Manage Users',  path: '/admin/users',    emoji: '👥' },
-            { label: 'Refresh Data',  action: fetchData,       emoji: '↺'  },
+            { label: 'Refresh Data',  action: () => fetchData(selectedBranch), emoji: '↺'  },
           ].map((action) => (
             <button
               key={action.label}

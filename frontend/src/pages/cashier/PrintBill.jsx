@@ -33,7 +33,7 @@ const PrintBill = () => {
 }, 700);
 
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   };
 

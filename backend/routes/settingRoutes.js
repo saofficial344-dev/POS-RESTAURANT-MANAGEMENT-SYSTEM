@@ -1,14 +1,11 @@
 import express from "express";
-
-import {
-  getTax,
-  updateTax,
-} from "../controllers/settingController.js";
+import { getTax, updateTax } from "../controllers/settingController.js";
+import protect from "../middleware/authMiddleware.js";
+import { adminOnly } from "../middleware/roleMiddleware.js";
 
 const router = express.Router();
 
-router.get("/", getTax);
-
-router.put("/", updateTax);
+router.get("/", protect, getTax);
+router.put("/", protect, adminOnly, updateTax);
 
 export default router;

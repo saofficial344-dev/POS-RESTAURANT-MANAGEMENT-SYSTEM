@@ -3,8 +3,9 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import {
   RefreshCw, XCircle, CheckCircle, Clock, ChefHat,
-  ShoppingBag, X, Loader2, AlertTriangle,
+  ShoppingBag, X, Loader2, AlertTriangle, ChevronDown, ChevronUp,
 } from "lucide-react";
+import OrderTimeline from "../../components/OrderTimeline";
 
 const STATUS_CFG = {
   Pending:   { label: "Pending",   badge: "bg-amber-100 text-amber-700",   dot: "bg-amber-400"   },
@@ -50,6 +51,8 @@ const ManagerOrders = () => {
   const [orders, setOrders]             = useState([]);
   const [loading, setLoading]           = useState(true);
   const [activeTab, setActiveTab]       = useState("All");
+  const [expandedTimelines, setExpandedTimelines] = useState({});
+  const toggleTimeline = (id) => setExpandedTimelines((prev) => ({ ...prev, [id]: !prev[id] }));
 
   // Complete flow
   const [completeTarget, setCompleteTarget] = useState(null);
@@ -336,6 +339,26 @@ const ManagerOrders = () => {
                         {order.cancelledBy && ` · by ${order.cancelledBy?.name || "Manager"}`}
                       </p>
                     )}
+
+                    {/* Timeline toggle */}
+                    {order.timeline?.length > 0 && (
+                      <div className="border-t border-gray-100 pt-2">
+                        <button
+                          onClick={() => toggleTimeline(order._id)}
+                          className="flex items-center gap-1 text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition-colors w-full"
+                        >
+                          {expandedTimelines[order._id]
+                            ? <><ChevronUp size={10} /> Hide Timeline</>
+                            : <><ChevronDown size={10} /> Show Timeline ({order.timeline.length} steps)</>
+                          }
+                        </button>
+                        {expandedTimelines[order._id] && (
+                          <div className="mt-2">
+                            <OrderTimeline timeline={order.timeline} />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -376,6 +399,16 @@ const ManagerOrders = () => {
                 </div>
                 <p className="text-xl font-black text-gray-900 mt-2">{fmt(completeTarget.totalAmount)}</p>
               </div>
+
+              {/* Order timeline (if available) */}
+              {completeTarget.timeline?.length > 0 && (
+                <div className="mb-5">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Order Journey</p>
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <OrderTimeline timeline={completeTarget.timeline} />
+                  </div>
+                </div>
+              )}
 
               {/* Payment method */}
               <div className="mb-4">

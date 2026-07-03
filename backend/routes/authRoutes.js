@@ -1,14 +1,33 @@
-import express from "express";
-import { loginUser, registerUser } from "../controllers/authController.js";
-import protect from "../middleware/authMiddleware.js";
-import { adminOnly } from "../middleware/roleMiddleware.js";
+import express from 'express';
+import {
+  loginUser,
+  registerUser,
+  refreshTokens,
+  logoutUser,
+  logoutAll,
+  forgotPassword,
+  verifyOtp,
+  resetPassword,
+  changePassword,
+} from '../controllers/authController.js';
+import protect from '../middleware/authMiddleware.js';
+import { adminOnly } from '../middleware/roleMiddleware.js';
 
 const router = express.Router();
 
-// Register — requires valid JWT and admin role; not publicly accessible
-router.post("/register", protect, adminOnly, registerUser);
+// ── Public routes ─────────────────────────────────────────────────────────────
+router.post('/login',           loginUser);
+router.post('/refresh',         refreshTokens);
+router.post('/logout',          logoutUser);
+router.post('/forgot-password', forgotPassword);
+router.post('/verify-otp',      verifyOtp);
+router.post('/reset-password',  resetPassword);
 
-// 🔐 Login
-router.post("/login", loginUser);
+// ── Protected: skip mustChangePassword check so user can actually change it ───
+router.post('/change-password', (req, _res, next) => { req.skipMustChange = true; next(); }, protect, changePassword);
+
+// ── Protected: admin creates staff accounts ───────────────────────────────────
+router.post('/register',   protect, adminOnly, registerUser);
+router.post('/logout-all', protect, logoutAll);
 
 export default router;

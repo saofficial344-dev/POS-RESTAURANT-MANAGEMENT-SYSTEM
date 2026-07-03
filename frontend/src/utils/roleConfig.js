@@ -8,7 +8,7 @@ export const ROLE_CONFIG = {
     label: "Admin Portal",
     icon: "👑",
     description: "Full system access & management",
-    dashboardPath: "/admin/menu",
+    dashboardPath: "/admin/dashboard",
     loginPath: "/login/admin",
     accentColor: "#6366f1",
     sidebarLabel: "Admin Panel",

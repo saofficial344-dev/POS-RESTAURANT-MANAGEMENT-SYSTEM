@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSocketEvent, useSocket } from '../../hooks/useSocket';
 import API from '../../services/api';
 
 // ── Kitchen timer (minutes since order created) ───────────────────────────────
@@ -43,7 +44,6 @@ const OrderCard = ({ order, onStatusChange, updating }) => {
         order.isUrgent ? 'border-red-400' : 'border-transparent'
       } ${isUpdating ? 'opacity-60' : ''}`}
     >
-      {/* Card header */}
       <div className="flex items-start justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
@@ -68,7 +68,6 @@ const OrderCard = ({ order, onStatusChange, updating }) => {
         <ElapsedBadge createdAt={order.createdAt} />
       </div>
 
-      {/* Items */}
       <div className="space-y-1.5 mb-3">
         {order.items?.map((item, i) => (
           <div key={i} className="flex items-center justify-between">
@@ -80,14 +79,12 @@ const OrderCard = ({ order, onStatusChange, updating }) => {
         ))}
       </div>
 
-      {/* Notes */}
       {order.notes && (
         <div className="mb-3 p-2 bg-amber-50 border border-amber-100 rounded-lg">
           <p className="text-xs text-amber-700">📝 {order.notes}</p>
         </div>
       )}
 
-      {/* Actions */}
       {order.status === 'Pending' && (
         <button
           onClick={() => onStatusChange(order._id, 'Cooking')}
@@ -107,8 +104,8 @@ const OrderCard = ({ order, onStatusChange, updating }) => {
         </button>
       )}
       {order.status === 'Ready' && (
-        <div className="w-full py-2.5 rounded-xl text-sm font-semibold bg-gray-100 text-gray-500 text-center">
-          🎉 Ready for pickup
+        <div className="w-full py-2.5 rounded-xl text-sm font-semibold bg-white/80 text-emerald-700 text-center border border-emerald-200">
+          🔔 Waiter notified — awaiting pickup
         </div>
       )}
     </div>
@@ -149,13 +146,15 @@ const Column = ({ title, emoji, orders, color, onStatusChange, updating }) => (
 
 // ── Main Component ────────────────────────────────────────────────────────────
 const KitchenDisplay = () => {
-  const navigate = useNavigate();
+  const navigate    = useNavigate();
   const { user, logout } = useAuth();
-  const [orders, setOrders] = useState({ pending: [], cooking: [], ready: [] });
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(null);
+  const { connected } = useSocket();
+  const [orders,      setOrders]      = useState({ pending: [], cooking: [], ready: [] });
+  const [loading,     setLoading]     = useState(true);
+  const [updating,    setUpdating]    = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
-  const [error, setError] = useState(null);
+  const [error,       setError]       = useState(null);
+  const fetchDebounce = useRef(null);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -173,24 +172,82 @@ const KitchenDisplay = () => {
     }
   }, []);
 
+  // Debounced re-fetch — prevents hammering the API on rapid socket events
+  const debouncedFetch = useCallback(() => {
+    if (fetchDebounce.current) clearTimeout(fetchDebounce.current);
+    fetchDebounce.current = setTimeout(fetchOrders, 300);
+  }, [fetchOrders]);
+
   useEffect(() => {
-    // Guard: only kitchen/admin users should see this
     if (user && !['kitchen', 'admin', 'manager'].includes(user.role)) {
       navigate('/', { replace: true });
       return;
     }
     fetchOrders();
-    const id = setInterval(fetchOrders, 10_000); // Refresh every 10 seconds
-    return () => clearInterval(id);
   }, [fetchOrders, user, navigate]);
+
+  // Real-time: new order → re-fetch so kitchen sees it immediately
+  useSocketEvent('order:created', () => debouncedFetch());
+
+  // Kitchen-specific: when waiter serves an order, remove from Ready column
+  useSocketEvent('order:served',  ({ orderId }) => {
+    setOrders((prev) => ({
+      pending: prev.pending.filter((o) => o._id !== orderId),
+      cooking: prev.cooking.filter((o) => o._id !== orderId),
+      ready:   prev.ready.filter((o)   => o._id !== orderId),
+    }));
+    setLastRefresh(new Date());
+  });
+
+  // Real-time: order status changed → update local state without full re-fetch
+  useSocketEvent('order:status:changed', ({ orderId, status }) => {
+    const REMOVE_STATUSES = ['Served', 'Completed', 'Cancelled'];
+
+    setOrders((prev) => {
+      // Find the order in any column
+      const allOrders = [...prev.pending, ...prev.cooking, ...prev.ready];
+      const order = allOrders.find((o) => o._id === orderId);
+
+      if (!order) {
+        // Unknown order — re-fetch to get fresh state
+        debouncedFetch();
+        return prev;
+      }
+
+      if (REMOVE_STATUSES.includes(status)) {
+        return {
+          pending: prev.pending.filter((o) => o._id !== orderId),
+          cooking: prev.cooking.filter((o) => o._id !== orderId),
+          ready:   prev.ready.filter((o)   => o._id !== orderId),
+        };
+      }
+
+      const updated = { ...order, status };
+
+      return {
+        pending: status === 'Pending'
+          ? [...prev.pending.filter((o) => o._id !== orderId), updated].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+          : prev.pending.filter((o) => o._id !== orderId),
+        cooking: status === 'Cooking'
+          ? [...prev.cooking.filter((o) => o._id !== orderId), updated].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+          : prev.cooking.filter((o) => o._id !== orderId),
+        ready: status === 'Ready'
+          ? [...prev.ready.filter((o) => o._id !== orderId), updated].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+          : prev.ready.filter((o) => o._id !== orderId),
+      };
+    });
+
+    setLastRefresh(new Date());
+  });
 
   const handleStatusChange = async (orderId, newStatus) => {
     setUpdating(orderId);
     try {
       await API.patch(`/orders/${orderId}/status`, { status: newStatus });
-      await fetchOrders();
+      // Socket event will update the UI — no need to re-fetch
     } catch (err) {
       console.error('Status update error:', err);
+      fetchOrders(); // fallback: re-fetch if socket missed it
     } finally {
       setUpdating(null);
     }
@@ -201,8 +258,7 @@ const KitchenDisplay = () => {
     navigate('/', { replace: true });
   };
 
-  const totalActive =
-    orders.pending.length + orders.cooking.length + orders.ready.length;
+  const totalActive = orders.pending.length + orders.cooking.length + orders.ready.length;
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col">
@@ -212,19 +268,23 @@ const KitchenDisplay = () => {
           <div>
             <h1 className="text-white font-bold text-xl">Kitchen Display</h1>
             <p className="text-gray-400 text-xs mt-0.5">
-              {lastRefresh
-                ? `Last updated ${lastRefresh.toLocaleTimeString()}`
-                : 'Connecting…'}
+              {lastRefresh ? `Updated ${lastRefresh.toLocaleTimeString()}` : 'Connecting…'}
               {error && <span className="text-red-400 ml-2">{error}</span>}
             </p>
           </div>
-          <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+          {/* Socket connection indicator */}
+          <div
+            className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}
+            title={connected ? 'Live' : 'Reconnecting…'}
+          />
         </div>
 
         <div className="flex items-center gap-4">
           <div className="text-right">
             <p className="text-white text-sm font-semibold">{totalActive} active</p>
-            <p className="text-gray-500 text-xs">{new Date().toLocaleTimeString()}</p>
+            <p className="text-gray-500 text-xs">
+              {connected ? '🟢 Live' : '🔴 Offline'}
+            </p>
           </div>
           <button
             onClick={fetchOrders}
@@ -250,7 +310,6 @@ const KitchenDisplay = () => {
           </div>
         </div>
       ) : (
-        /* ── Order Columns ── */
         <div className="flex-1 grid grid-cols-3 gap-4 p-4 min-h-0">
           <Column
             title="Pending"

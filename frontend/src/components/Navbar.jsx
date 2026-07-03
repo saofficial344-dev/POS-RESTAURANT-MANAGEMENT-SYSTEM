@@ -1,6 +1,7 @@
 import { useLocation } from "react-router-dom";
 import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
+import NotificationCenter from "./NotificationCenter";
 
 const Navbar = () => {
   const location  = useLocation();
@@ -26,6 +27,7 @@ const Navbar = () => {
       {/* User identity — logout lives in the Sidebar, not here */}
       {user && (
         <div className="flex items-center gap-3">
+          <NotificationCenter />
           <div className="text-right hidden sm:block">
             <p className="text-sm font-semibold text-gray-800 leading-tight">{user.name}</p>
             <p className="text-xs text-gray-400 capitalize">{user.role}</p>

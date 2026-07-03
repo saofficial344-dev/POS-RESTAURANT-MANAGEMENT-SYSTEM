@@ -10,16 +10,25 @@ const navLink = (active) =>
       : "text-gray-400 hover:bg-white/10 hover:text-white"
   }`;
 
+const ALERT_STATUSES = ['expired', 'past_due', 'suspended'];
+const BILLING_MATCHES = ['/admin/subscription', '/admin/billing', '/admin/payments'];
+
 // ─── Per-role navigation definitions ─────────────────────────────────────────
+const ADMIN_NAV = [
+  { label: "Dashboard",    to: "/admin/dashboard",    match: "/admin/dashboard"    },
+  { label: "Orders",       to: "/admin/orders",       match: "/admin/orders"       },
+  { label: "Menu",         to: "/admin/menu",         match: "/admin/menu"         },
+  { label: "Tables",       to: "/admin/tables",       match: "/admin/tables"       },
+  { label: "Bills",        to: "/admin/bills",        match: "/admin/bills"        },
+  { label: "Users",        to: "/admin/users",        match: "/admin/users"        },
+  { label: "Branches",     to: "/admin/branches",     match: "/admin/branches"     },
+  { label: "Subscription", to: "/admin/subscription", match: "/admin/subscription" },
+  { label: "Billing",      to: "/admin/billing",      match: "/admin/billing"      },
+  { label: "Payments",     to: "/admin/payments",     match: "/admin/payments"     },
+];
+
 const NAV_ITEMS = {
-  admin: [
-    { label: "Dashboard", to: "/admin/dashboard", match: "/admin/dashboard" },
-    { label: "Orders",    to: "/admin/orders",    match: "/admin/orders"    },
-    { label: "Menu",      to: "/admin/menu",      match: "/admin/menu"      },
-    { label: "Tables",    to: "/admin/tables",    match: "/admin/tables"    },
-    { label: "Bills",     to: "/admin/bills",     match: "/admin/bills"     },
-    { label: "Users",     to: "/admin/users",     match: "/admin/users"     },
-  ],
+  admin: ADMIN_NAV,
   cashier: [
     { label: "Dashboard", to: "/pos/dashboard", match: "/pos/dashboard" },
     { label: "Menu",      to: "/pos/menu",      match: "/pos/menu"      },
@@ -33,6 +42,7 @@ const NAV_ITEMS = {
   ],
   manager: [
     { label: "Dashboard", to: "/manager/dashboard", match: "/manager/dashboard" },
+    { label: "Orders",    to: "/manager/orders",    match: "/manager/orders"    },
   ],
 };
 
@@ -42,12 +52,15 @@ const Sidebar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const roleConfig = ROLE_CONFIG[user?.role] ?? null;
-  const links      = NAV_ITEMS[user?.role]   ?? [];
+  const roleConfig  = ROLE_CONFIG[user?.role] ?? null;
+  const links       = NAV_ITEMS[user?.role]   ?? [];
+  const planStatus  = user?.restaurant?.planStatus;
+  const needsAttention = ALERT_STATUSES.includes(planStatus);
 
   const handleLogout = () => {
-    logout();
-    navigate("/", { replace: true });
+    sessionStorage.clear();
+    logout();                         // synchronous: clears localStorage + React state immediately
+    navigate("/", { replace: true }); // replace prevents back-navigation into protected pages
     toast.success("Logged out");
   };
 
@@ -70,20 +83,47 @@ const Sidebar = () => {
               {roleConfig?.sidebarLabel ?? "Panel"}
             </p>
           </div>
+          {/* Subscription alert banner */}
+          {needsAttention && (
+            <div className="mt-3 flex items-center gap-2 bg-red-950 border border-red-800 rounded-xl px-3 py-2">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+              </span>
+              <p className="text-[10px] font-bold text-red-300 leading-tight">
+                {planStatus === 'expired'   && 'Plan expired — renew now'}
+                {planStatus === 'past_due'  && 'Payment overdue'}
+                {planStatus === 'suspended' && 'Account suspended'}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Navigation — scrolls independently if items overflow */}
         <nav className="flex flex-col gap-1.5 flex-1 overflow-y-auto min-h-0">
-          {links.map(({ label, to, match }) => (
-            <Link
-              key={to}
-              to={to}
-              className={navLink(location.pathname.startsWith(match))}
-            >
-              {label}
-              <span className="text-gray-500 group-hover:text-white">→</span>
-            </Link>
-          ))}
+          {links.map(({ label, to, match }) => {
+            const isActive   = location.pathname.startsWith(match);
+            const isBillingLink = BILLING_MATCHES.includes(match);
+            const showBadge  = needsAttention && isBillingLink;
+
+            return (
+              <Link
+                key={to}
+                to={to}
+                className={navLink(isActive)}
+              >
+                {label}
+                {showBadge ? (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                  </span>
+                ) : (
+                  <span className="text-gray-500 group-hover:text-white">→</span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Logout + footer — always pinned to bottom */}

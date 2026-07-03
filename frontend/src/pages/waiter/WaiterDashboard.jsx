@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useSocketEvent, useSocket } from '../../hooks/useSocket';
 import API from '../../services/api';
 import {
   Users, Clock, CheckCircle, AlertCircle,
-  RefreshCw, ChefHat, X, LayoutGrid, ClipboardList,
+  RefreshCw, ChefHat, X, LayoutGrid, ClipboardList, Wifi, WifiOff, Bell,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -123,15 +124,17 @@ const WaiterDashboard = () => {
   const { user } = useAuth();
 
   // ── Remote data ──────────────────────────────────────────────────────────
-  const [tables, setTables] = useState([]);
+  const [tables,       setTables]       = useState([]);
   const [activeOrders, setActiveOrders] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [readyOrders,  setReadyOrders]  = useState([]);
+  const [categories,   setCategories]   = useState([]);
+  const [items,        setItems]        = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [serving,      setServing]      = useState(null); // orderId being served
 
   // ── UI state ──────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState('floorplan'); // 'floorplan' | 'order' | 'orders'
-  const [viewModal, setViewModal] = useState({ open: false, table: null, order: null });
+  const [activeTab,  setActiveTab]  = useState('floorplan'); // 'floorplan' | 'ready' | 'order' | 'orders'
+  const [viewModal,  setViewModal]  = useState({ open: false, table: null, order: null });
 
   // ── New Order state ───────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
@@ -146,14 +149,16 @@ const WaiterDashboard = () => {
   // ── Data fetching ─────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     try {
-      const [tablesRes, ordersRes, catsRes, itemsRes] = await Promise.all([
+      const [tablesRes, ordersRes, readyRes, catsRes, itemsRes] = await Promise.all([
         API.get('/tables'),
         API.get('/orders?status=Pending,Cooking,Ready,Served'),
+        API.get('/orders/ready'),
         API.get('/categories'),
         API.get('/items'),
       ]);
       setTables(tablesRes.data.data || []);
       setActiveOrders(ordersRes.data.data || []);
+      setReadyOrders(readyRes.data.data || []);
       setCategories(catsRes.data || []);
       setItems(Array.isArray(itemsRes.data) ? itemsRes.data : []);
     } catch (err) {
@@ -163,11 +168,63 @@ const WaiterDashboard = () => {
     }
   }, []);
 
+  const { connected } = useSocket();
+
   useEffect(() => {
     fetchAll();
-    const id = setInterval(fetchAll, 15_000);
-    return () => clearInterval(id);
+    // No polling — socket events drive live updates
   }, [fetchAll]);
+
+  // Real-time: table status changed → update tables array
+  useSocketEvent('table:status:changed', ({ tableId, status }) => {
+    setTables((prev) => prev.map((t) => (t._id === tableId ? { ...t, status } : t)));
+  });
+
+  // Real-time: kitchen marked order Ready → add to ready queue, show urgent toast
+  useSocketEvent('order:ready', (payload) => {
+    const { orderId, orderNumber, tableNumber, itemCount } = payload;
+    setReadyOrders((prev) => {
+      if (prev.find((o) => o._id === orderId)) return prev;
+      return [{ _id: orderId, orderNumber, tableNumber, itemCount, readyAt: new Date(), status: 'Ready' }, ...prev];
+    });
+    setActiveOrders((prev) => prev.map((o) => (o._id === orderId ? { ...o, status: 'Ready' } : o)));
+    toast(`🍽️ Order ${orderNumber} — Table T-${tableNumber || '?'} is READY`, {
+      duration: 8000,
+      style: { background: '#065f46', color: '#fff', fontWeight: 700 },
+    });
+  });
+
+  // Real-time: order status changed (generic) → update activeOrders
+  useSocketEvent('order:status:changed', ({ orderId, status }) => {
+    if (['Served', 'Completed', 'Cancelled'].includes(status)) {
+      setActiveOrders((prev) => prev.filter((o) => o._id !== orderId));
+      setReadyOrders((prev) => prev.filter((o) => o._id !== orderId));
+      return;
+    }
+    setActiveOrders((prev) => prev.map((o) => (o._id === orderId ? { ...o, status } : o)));
+  });
+
+  // Real-time: new order by someone else → refresh all data
+  useSocketEvent('order:created', () => fetchAll());
+
+  // Real-time: table became available (after payment)
+  useSocketEvent('table:available', ({ tableId }) => {
+    setTables((prev) => prev.map((t) => (t._id === tableId ? { ...t, status: 'Available' } : t)));
+  });
+
+  // ── Serve an order ────────────────────────────────────────────────────────
+  const handleServe = async (orderId) => {
+    setServing(orderId);
+    try {
+      await API.patch(`/orders/${orderId}/status`, { status: 'Served' });
+      setReadyOrders((prev) => prev.filter((o) => o._id !== orderId));
+      toast.success('Order marked as served');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to serve order');
+    } finally {
+      setServing(null);
+    }
+  };
 
   // ── Filtered menu items ───────────────────────────────────────────────────
   const filteredItems = items.filter((item) => {
@@ -274,11 +331,13 @@ const WaiterDashboard = () => {
     occupied:  tables.filter((t) => t.status === 'Occupied').length,
     reserved:  tables.filter((t) => t.status === 'Reserved').length,
     active:    activeOrders.length,
+    ready:     readyOrders.length,
   };
 
   // ── Tabs config ───────────────────────────────────────────────────────────
   const TABS = [
     { key: 'floorplan', icon: LayoutGrid,    label: 'Floor Plan',    badge: tables.length },
+    { key: 'ready',     icon: Bell,          label: 'Ready to Serve',badge: readyOrders.length || undefined, urgent: readyOrders.length > 0 },
     { key: 'order',     icon: ChefHat,       label: 'New Order',     badge: cart.length || undefined },
     { key: 'orders',    icon: ClipboardList, label: 'Active Orders', badge: activeOrders.length },
   ];
@@ -292,23 +351,29 @@ const WaiterDashboard = () => {
           <h1 className="text-2xl font-bold text-gray-900">Waiter Station</h1>
           <p className="text-sm text-gray-400 mt-0.5">Welcome, {user?.name}</p>
         </div>
-        <button
-          onClick={fetchAll}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-        >
-          <RefreshCw size={14} />Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {connected
+            ? <Wifi size={14} className="text-emerald-500" title="Live" />
+            : <WifiOff size={14} className="text-red-400" title="Reconnecting…" />}
+          <button
+            onClick={fetchAll}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+          >
+            <RefreshCw size={14} />Refresh
+          </button>
+        </div>
       </div>
 
       {/* ── Stats ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
         {[
-          { label: 'Available',     value: stats.available, icon: CheckCircle, color: 'text-emerald-500' },
-          { label: 'Occupied',      value: stats.occupied,  icon: Users,       color: 'text-red-500'     },
-          { label: 'Reserved',      value: stats.reserved,  icon: Clock,       color: 'text-amber-500'   },
-          { label: 'Active Orders', value: stats.active,    icon: ChefHat,     color: 'text-blue-500'    },
+          { label: 'Available',     value: stats.available, icon: CheckCircle, color: 'text-emerald-500', border: '' },
+          { label: 'Occupied',      value: stats.occupied,  icon: Users,       color: 'text-red-500',     border: '' },
+          { label: 'Reserved',      value: stats.reserved,  icon: Clock,       color: 'text-amber-500',   border: '' },
+          { label: 'Active Orders', value: stats.active,    icon: ChefHat,     color: 'text-blue-500',    border: '' },
+          { label: 'Ready to Serve',value: stats.ready,     icon: Bell,        color: 'text-emerald-600', border: stats.ready > 0 ? 'border-emerald-300 bg-emerald-50' : '' },
         ].map((s) => (
-          <div key={s.label} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+          <div key={s.label} className={`border rounded-2xl p-4 shadow-sm transition-all ${s.border || 'bg-white border-gray-100'}`}>
             <s.icon size={20} className={s.color} />
             <p className="text-2xl font-bold text-gray-900 mt-2">{s.value}</p>
             <p className="text-xs text-gray-400 mt-0.5">{s.label}</p>
@@ -317,19 +382,23 @@ const WaiterDashboard = () => {
       </div>
 
       {/* ── Tab Bar ── */}
-      <div className="flex gap-2 mb-6">
-        {TABS.map(({ key, icon: Icon, label, badge }) => (
+      <div className="flex flex-wrap gap-2 mb-6">
+        {TABS.map(({ key, icon: Icon, label, badge, urgent }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-              activeTab === key ? 'bg-black text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              activeTab === key
+                ? urgent ? 'bg-emerald-600 text-white ring-2 ring-emerald-300' : 'bg-black text-white'
+                : urgent ? 'bg-emerald-50 text-emerald-700 border-2 border-emerald-300 animate-pulse' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
             }`}
           >
             <Icon size={14} />
             {label}
             {badge !== undefined && badge > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${activeTab === key ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'}`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                activeTab === key ? 'bg-white/20 text-white' : urgent ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600'
+              }`}>
                 {badge}
               </span>
             )}
@@ -395,6 +464,84 @@ const WaiterDashboard = () => {
             </div>
           </>
         )
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* TAB: Ready to Serve                                                   */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'ready' && (
+        <div>
+          {readyOrders.length === 0 ? (
+            <div className="py-24 text-center bg-white border border-gray-100 rounded-2xl">
+              <Bell size={40} className="text-gray-200 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-400">No orders ready right now</p>
+              <p className="text-xs text-gray-300 mt-1">Kitchen will notify you when food is ready</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-emerald-700 mb-2">
+                {readyOrders.length} order{readyOrders.length !== 1 ? 's' : ''} waiting — oldest first
+              </p>
+              {readyOrders
+                .slice()
+                .sort((a, b) => new Date(a.readyAt || a.createdAt) - new Date(b.readyAt || b.createdAt))
+                .map((order) => {
+                  const waitMins = order.readyAt
+                    ? Math.floor((Date.now() - new Date(order.readyAt)) / 60000)
+                    : null;
+                  return (
+                    <div
+                      key={order._id}
+                      className={`bg-white border-2 rounded-2xl p-5 shadow-sm transition-all ${
+                        waitMins !== null && waitMins >= 5 ? 'border-red-300 bg-red-50/30' : 'border-emerald-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-lg font-black text-gray-900">
+                              Table T-{order.tableNumber || '?'}
+                            </span>
+                            <span className="text-sm text-gray-400 font-mono">#{order.orderNumber}</span>
+                            {waitMins !== null && waitMins >= 5 && (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+                                Waiting {waitMins}m
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500">
+                            {order.customerName && <span className="mr-2">{order.customerName}</span>}
+                            {order.items?.length ?? order.itemCount} item{(order.items?.length ?? order.itemCount) !== 1 ? 's' : ''}
+                          </p>
+                          {order.items?.length > 0 && (
+                            <p className="text-xs text-gray-400">
+                              {order.items.slice(0, 3).map((i) => `${i.itemName} ×${i.quantity}`).join(', ')}
+                              {order.items.length > 3 ? ` +${order.items.length - 3} more` : ''}
+                            </p>
+                          )}
+                          <p className="text-xs text-emerald-600 font-semibold">
+                            ✅ Ready{order.readyAt ? ` at ${new Date(order.readyAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => handleServe(order._id)}
+                          disabled={serving === order._id}
+                          className="ml-4 shrink-0 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {serving === order._id ? (
+                            <><RefreshCw size={14} className="animate-spin" /> Serving…</>
+                          ) : (
+                            <>🍽️ Serve Order</>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════ */}

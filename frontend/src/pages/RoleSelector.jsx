@@ -73,7 +73,7 @@ const RoleSelector = () => {
       </div>
 
       {/* ── FOOTER ── */}
-      <p className="mt-12 text-gray-600 text-xs">
+      <p className="mt-6 text-gray-600 text-xs">
         ShahnaynLabs &copy; {new Date().getFullYear()} &mdash; Bayroute POS
       </p>
 

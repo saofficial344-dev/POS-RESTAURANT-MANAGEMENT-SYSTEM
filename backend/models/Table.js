@@ -1,67 +1,62 @@
 import mongoose from 'mongoose';
 
 const TableSchema = new mongoose.Schema({
+  restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant' },
+  branchId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Branch'     },
   tableNumber: {
-    type: Number,
+    type:     Number,
     required: [true, 'Please provide table number'],
-    unique: true,
   },
   capacity: {
-    type: Number,
+    type:     Number,
     required: [true, 'Please provide seating capacity'],
-    min: 1,
-    max: 20,
+    min:      1,
+    max:      20,
   },
   section: {
-    type: String,
-    enum: ['Indoor', 'Outdoor', 'VIP', 'Bar', 'Lounge'],
+    type:    String,
+    enum:    ['Indoor', 'Outdoor', 'VIP', 'Bar', 'Lounge'],
     default: 'Indoor',
   },
   status: {
-    type: String,
-    enum: ['Available', 'Occupied', 'Reserved', 'Maintenance'],
+    type:    String,
+    enum:    ['Available', 'Occupied', 'Reserved', 'Maintenance'],
     default: 'Available',
   },
   currentOrderId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Order',
+    type:    mongoose.Schema.Types.ObjectId,
+    ref:     'Order',
     default: null,
   },
   occupiedBy: {
     numberOfGuests: Number,
-    customerName: String,
-    checkinTime: Date,
+    customerName:   String,
+    checkinTime:    Date,
   },
   reservedFor: {
-    customerName: String,
-    customerPhone: String,
+    customerName:    String,
+    customerPhone:   String,
     reservationTime: Date,
-    numberOfGuests: Number,
+    numberOfGuests:  Number,
   },
   branch: {
-    type: String,
+    type:    String,
     default: 'Main',
   },
   lastCleanedAt: Date,
   needsCleaning: {
-    type: Boolean,
+    type:    Boolean,
     default: false,
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
   notes: String,
-});
+}, { timestamps: true });
 
-TableSchema.pre('save', function() {
+// Per-restaurant unique table numbers (sparse = null restaurantId excluded)
+TableSchema.index({ restaurantId: 1, tableNumber: 1 }, { unique: true, sparse: true });
+TableSchema.index({ restaurantId: 1, status: 1 });
+
+TableSchema.pre('save', function () {
   this.updatedAt = Date.now();
 });
 
-const Table = mongoose.model('Table', TableSchema);
-
-export default Table;
+export default mongoose.model('Table', TableSchema);

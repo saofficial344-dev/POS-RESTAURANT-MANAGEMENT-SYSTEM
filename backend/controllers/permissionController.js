@@ -2,7 +2,8 @@ import Permission from '../models/Permission.js';
 
 export const initializeDefaultPermissions = async (req, res) => {
   try {
-    const existingPermissions = await Permission.countDocuments();
+    const restaurantId = req.restaurantId || null;
+    const existingPermissions = await Permission.countDocuments({ restaurantId });
     if (existingPermissions > 0) {
       return res.status(400).json({ success: false, message: 'Permissions already initialized' });
     }
@@ -118,7 +119,7 @@ export const initializeDefaultPermissions = async (req, res) => {
       },
     };
 
-    const permissions = Object.values(defaultPerms);
+    const permissions = Object.values(defaultPerms).map(p => ({ ...p, restaurantId }));
     await Permission.insertMany(permissions);
 
     res.status(201).json({
@@ -134,7 +135,8 @@ export const initializeDefaultPermissions = async (req, res) => {
 
 export const getAllPermissions = async (req, res) => {
   try {
-    const permissions = await Permission.find().sort({ roleName: 1 });
+    const restaurantId = req.restaurantId || null;
+    const permissions = await Permission.find({ restaurantId }).sort({ roleName: 1 });
 
     res.status(200).json({ success: true, count: permissions.length, data: permissions });
   } catch (error) {
@@ -144,7 +146,8 @@ export const getAllPermissions = async (req, res) => {
 
 export const getPermissionByRole = async (req, res) => {
   try {
-    const permission = await Permission.findOne({ roleName: req.params.roleName });
+    const restaurantId = req.restaurantId || null;
+    const permission = await Permission.findOne({ restaurantId, roleName: req.params.roleName });
 
     if (!permission) {
       return res.status(404).json({ success: false, message: 'Role not found' });
@@ -164,7 +167,8 @@ export const updatePermissions = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide permissions object' });
     }
 
-    let permission = await Permission.findOne({ roleName: req.params.roleName });
+    const restaurantId = req.restaurantId || null;
+    let permission = await Permission.findOne({ restaurantId, roleName: req.params.roleName });
 
     if (!permission) {
       return res.status(404).json({ success: false, message: 'Role not found' });
@@ -182,8 +186,8 @@ export const updatePermissions = async (req, res) => {
 export const checkPermission = async (req, res) => {
   try {
     const { roleName, permission } = req.params;
-
-    const role = await Permission.findOne({ roleName });
+    const restaurantId = req.restaurantId || null;
+    const role = await Permission.findOne({ restaurantId, roleName });
 
     if (!role) {
       return res.status(404).json({ success: false, message: 'Role not found' });
@@ -233,8 +237,8 @@ export const getPermissionModules = async (req, res) => {
 export const grantPermission = async (req, res) => {
   try {
     const { roleName, module, action } = req.params;
-
-    let permission = await Permission.findOne({ roleName });
+    const restaurantId = req.restaurantId || null;
+    let permission = await Permission.findOne({ restaurantId, roleName });
 
     if (!permission) {
       return res.status(404).json({ success: false, message: 'Role not found' });
@@ -256,8 +260,8 @@ export const grantPermission = async (req, res) => {
 export const revokePermission = async (req, res) => {
   try {
     const { roleName, module, action } = req.params;
-
-    let permission = await Permission.findOne({ roleName });
+    const restaurantId = req.restaurantId || null;
+    let permission = await Permission.findOne({ restaurantId, roleName });
 
     if (!permission) {
       return res.status(404).json({ success: false, message: 'Role not found' });
